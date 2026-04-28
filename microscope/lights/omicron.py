@@ -44,14 +44,14 @@ class OmicronLaser(
     """
 
     laser_status = {
-        0: "Error state",
+        0: "Error state: 1",
         1: "Laser ON",
         2: "Preheating",
         4: "Attention",
         6: "Laser enabled",
-        7: "Key switch state",
-        8: "Toggle key switch",
-        9: "System power",
+        7: "Key switch state: 1",
+        8: "Toggle key switch!",
+        9: "System powered",
         13: "External sensor connected",
     }
 
@@ -74,7 +74,7 @@ class OmicronLaser(
         # Read Firmware
         self.model, self.device_id, self.firmware = self.ask_firmware()
         self.max_power_mW = float(self.ask("GMP"))
-        self.power_mW = float(self.ask("GLP"))
+        self.power_mW = self.ask_power()
         self.operating_mode = self.ask("GOM")
         self.status = self.ask_actual_status()
         self.wavelength, self.spec_power = self.ask_specs()
@@ -113,12 +113,16 @@ class OmicronLaser(
         """Get the actual status of the laser. Return the binary status string."""
         response = self.ask("GAS")
         binary_status = format(int(response, 16), "b")[::-1]
+        print("Omicron laser status:")
         for i in range(len(binary_status)):
             if binary_status[i] == '1':
                 print(self.laser_status.get(i, "Undefined Status"))
+        print("\n")
         if binary_status[0] == '1':
-            print("Error state on laser!")
+            print("-> Error state on laser!")
             # TODO: do follow up investigation
+            failure_byte = self.ask("GFB")
+            print("Failure byte: %s" % failure_byte)
         return binary_status
 
     def ask_specs(self) -> tuple:

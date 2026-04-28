@@ -21,6 +21,7 @@
 ## along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+import time
 
 import serial
 
@@ -70,7 +71,7 @@ class SapphireLaser(
         # The sapphire laser turns on as soon as the key is switched
         # on.  So turn radiation off before we start.
         self.send(b"L=0")
-
+        
         # Head ID value is a float point value,
         # but only the integer part is significant
         headID = int(float(self.send(b"?hid")))
@@ -86,8 +87,15 @@ class SapphireLaser(
         # This device always writes backs something.  If echo is on,
         # it's the whole command, otherwise just an empty line.  Read
         # it and throw it away.
+        time.sleep(0.2)
         self._readline()
         return count
+
+    def _readline(self) -> bytes:
+        """Read a line from connection without leading and trailing whitespace."""
+        response = self.connection.readline().strip()
+        #response = self.connection.read_all().decode('latin-1').strip()
+        return response
 
     def send(self, command):
         """Send command and retrieve response."""
@@ -183,7 +191,7 @@ class SapphireLaser(
         return float(self.send(b"?p"))
 
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def _set_power_mw(self, mW):
+    def set_power_mw(self, mW):
         mW_str = "%.3f" % mW
         _logger.info("Setting laser power to %s mW.", mW_str)
         # using send instead of _write, because
@@ -195,7 +203,7 @@ class SapphireLaser(
         # clip it again since the min power we actually can do is 0.2
         # and we get an error from the laser if we set it to lower.
         power = max(self._min_power, power)
-        self._set_power_mw(power * self._max_power_mw)
+        self.set_power_mw(power * self._max_power_mw)
 
     def _do_get_power(self) -> float:
         return self._get_power_mw() / self._max_power_mw

@@ -139,7 +139,7 @@ class OmicronLaser(
         power = int(power_hex, 16) * self.max_power_mW / 4095
         return power
 
-    def set_power(self, power) -> None:
+    def set_power_mw(self, power) -> None:
         """Set the desired power in mW"""
         # Calculate the corresponding HEX code and transmit it
         if power > self.max_power_mW:
@@ -161,7 +161,7 @@ class OmicronLaser(
             print("Laser turned ON.")
         elif response == 'x':
             print("Failed to turn on. Check if the laser is ready.")
-        self.status = self.ask_actual_status()
+        #self.status = self.ask_actual_status()
 
     def laser_off(self) -> None:
         """Turn the laser OFF."""
@@ -170,7 +170,7 @@ class OmicronLaser(
             print("Laser turned OFF.")
         elif response == 'x':
             print("Failed to turn off. Check if the laser is ready.")
-        self.status = self.ask_actual_status()
+        #self.status = self.ask_actual_status()
 
     def get_laser_status(self) -> bool:
         """Get the laser status, True if on."""
@@ -188,7 +188,7 @@ class OmicronLaser(
         return self.ask_power()
     
     def _do_set_power(self, power):
-        return self.set_power(power)
+        return self.set_power_mw(power)
     
     def get_is_on(self):
         return self.get_laser_status()
@@ -196,3 +196,8 @@ class OmicronLaser(
     def get_status(self):
         return self.ask_actual_status()
     
+    def _do_enable(self):
+        return self.laser_on()
+    
+    def _do_disable(self):
+        return self.laser_off()

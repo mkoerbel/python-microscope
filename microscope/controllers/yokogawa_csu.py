@@ -36,8 +36,8 @@ _DEFAULT_COMMANDS = {
 	"set_spinning_disk_speed": "MS, {speed}", # int
 	"set_spinning_disk_to_exposure": "MS_ADJUST, {exposure}", # float
 	"get_spinning_disk_max_speed": "MS_MAX, ?",
-	"get_filterwheel_position": "FW, 2, ?", # needs to be set to FW channel, get with "SYSTEM, ?"
-	"set_filterwheel_position": "FW, 2, {position}", # int
+	"get_filterwheel_position": "FW_POS, 2, ?", # needs to be set to FW channel, get with "SYSTEM, ?"
+	"set_filterwheel_position": "FW_POS, 2, {position}", # int
 	"get_filterwheel_info": "FW_INFO, 2, {position}, ?", # int
 	"get_dichroic_position": "DM_POS, ?",
 	"set_dichroic_position": "DM_POS, {position}", # int

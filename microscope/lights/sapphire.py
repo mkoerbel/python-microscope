@@ -66,11 +66,11 @@ class SapphireLaser(
             parity=serial.PARITY_NONE,
         )
         # Turning off command prompt
-        self.send(b">=0")
+        self._write(b">=0")
 
         # The sapphire laser turns on as soon as the key is switched
         # on.  So turn radiation off before we start.
-        self.send(b"L=0")
+        self._write(b"L=0")
         
         # Head ID value is a float point value,
         # but only the integer part is significant
@@ -87,7 +87,7 @@ class SapphireLaser(
         # This device always writes backs something.  If echo is on,
         # it's the whole command, otherwise just an empty line.  Read
         # it and throw it away.
-        time.sleep(0.2)
+        time.sleep(0.05)  # give the device a moment to respond
         self._readline()
         return count
 
@@ -97,10 +97,18 @@ class SapphireLaser(
         #response = self.connection.read_all().decode('latin-1').strip()
         return response
 
-    def send(self, command):
-        """Send command and retrieve response."""
+    def send(self, command, max_read=10):
+        """Send command and retrieve response, retrying up to max_read times."""
         self._write(command)
-        return self._readline()
+        for _ in range(max_read):
+            response = self._readline()
+            if response:
+                return response
+            time.sleep(0.05)
+        _logger.warning(
+            "No response after %d attempts for command: %s", max_read, command
+        )
+        return b""
 
     @microscope.abc.SerialDeviceMixin.lock_comms
     def clearFault(self):
@@ -160,7 +168,7 @@ class SapphireLaser(
     def _do_enable(self):
         _logger.info("Turning laser ON.")
         # Turn on emission.
-        response = self.send(b"l=1")
+        response = self._write(b"l=1")
         _logger.info("l=1: [%s]", response.decode())
 
         # Enabling laser might take more than 500ms (default timeout)
@@ -196,7 +204,7 @@ class SapphireLaser(
         _logger.info("Setting laser power to %s mW.", mW_str)
         # using send instead of _write, because
         # if laser is not on, warning is returned
-        return self.send(b"p=%s" % mW_str.encode())
+        return self._write(b"p=%s" % mW_str.encode())
 
     def _do_set_power(self, power: float) -> None:
         # power is already clipped to the [0 1] range but we need to

@@ -74,9 +74,12 @@ class SapphireLaser(
         
         # Head ID value is a float point value,
         # but only the integer part is significant
+        time.sleep(0.5)
+        self.connection.reset_input_buffer()
         headID = int(float(self.send(b"?hid")))
         _logger.info("Sapphire laser serial number: [%s]", headID)
-
+        time.sleep(0.5)
+        self.connection.reset_input_buffer()
         self._max_power_mw = float(self.send(b"?maxlp"))
         self._min_power = float(self.send(b"?minlp")) / self._max_power_mw
 
@@ -87,7 +90,7 @@ class SapphireLaser(
         # This device always writes backs something.  If echo is on,
         # it's the whole command, otherwise just an empty line.  Read
         # it and throw it away.
-        time.sleep(0.05)  # give the device a moment to respond
+        time.sleep(0.1)  # give the device a moment to respond
         self._readline()
         return count
 
@@ -104,7 +107,7 @@ class SapphireLaser(
             response = self._readline()
             if response:
                 return response
-            time.sleep(0.05)
+            time.sleep(0.1)
         _logger.warning(
             "No response after %d attempts for command: %s", max_read, command
         )

@@ -77,11 +77,13 @@ class SapphireLaser(
         time.sleep(0.5)
         self.connection.reset_input_buffer()
         headID = int(float(self.send(b"?hid")))
-        _logger.info("Sapphire laser serial number: [%s]", headID)
+        _logger.info("Sapphire: serial number %s", headID)
         time.sleep(0.5)
         self.connection.reset_input_buffer()
         self._max_power_mw = float(self.send(b"?maxlp"))
-        self._min_power = float(self.send(b"?minlp")) / self._max_power_mw
+        time.sleep(0.5)
+        self.connection.reset_input_buffer()
+        self._min_power = float(self.send(b"?minlp"))
 
         self.initialize()
 
@@ -90,7 +92,7 @@ class SapphireLaser(
         # This device always writes backs something.  If echo is on,
         # it's the whole command, otherwise just an empty line.  Read
         # it and throw it away.
-        time.sleep(0.1)  # give the device a moment to respond
+        time.sleep(0.5)  # give the device a moment to respond
         self._readline()
         return count
 
@@ -100,7 +102,7 @@ class SapphireLaser(
         #response = self.connection.read_all().decode('latin-1').strip()
         return response
 
-    def send(self, command, max_read=10):
+    def send(self, command, max_read=20):
         """Send command and retrieve response, retrying up to max_read times."""
         self._write(command)
         for _ in range(max_read):
@@ -109,7 +111,7 @@ class SapphireLaser(
                 return response
             time.sleep(0.1)
         _logger.warning(
-            "No response after %d attempts for command: %s", max_read, command
+            "Sapphire: No response after %d attempts for command: %s", max_read, command
         )
         return b""
 
@@ -130,18 +132,18 @@ class SapphireLaser(
         status_code = self.send(b"?sta")
         result.append(
             (
-                "Laser status: "
+                "Sapphire: Laser status: "
                 + self.laser_status.get(status_code, "Undefined")
             )
         )
 
         for cmd, stat in [
-            (b"?l", "Ligh Emission on?"),
-            (b"?t", "TEC Servo on?"),
-            (b"?k", "Key Switch on?"),
-            (b"?sp", "Target power:"),
-            (b"?p", "Measured power:"),
-            (b"?hh", "Head operating hours:"),
+            (b"?l", "  Ligh Emission on?"),
+            (b"?t", "  TEC Servo on?"),
+            (b"?k", "  Key Switch on?"),
+            (b"?sp", "  Target power:"),
+            (b"?p", "  Measured power:"),
+            (b"?hh", "  Head operating hours:"),
         ]:
             result.append(stat + " " + self.send(cmd).decode())
 
@@ -169,10 +171,10 @@ class SapphireLaser(
     # Turn the laser ON. Return True if we succeeded, False otherwise.
     @microscope.abc.SerialDeviceMixin.lock_comms
     def _do_enable(self):
-        _logger.info("Turning laser ON.")
+        _logger.info("Sapphire: Turning laser ON.")
         # Turn on emission.
         response = self._write(b"l=1")
-        _logger.info("l=1: [%s]", response.decode())
+        _logger.info("Sapphire: l=1: [%s]", response.decode())
 
         # Enabling laser might take more than 500ms (default timeout)
         prevTimeout = self.connection.timeout
@@ -182,14 +184,14 @@ class SapphireLaser(
 
         if not isON:
             # Something went wrong.
-            _logger.error("Failed to turn on. Current status:\r\n")
+            _logger.error("Sapphire: Failed to turn on. Current status:\r\n")
             _logger.error(self.get_status())
         return isON
 
     # Turn the laser OFF.
     @microscope.abc.SerialDeviceMixin.lock_comms
     def disable(self):
-        _logger.info("Turning laser OFF.")
+        _logger.info("Sapphire: Turning laser OFF.")
         return self._write(b"l=0")
 
     # Return True if the laser is currently able to produce light.
@@ -203,17 +205,30 @@ class SapphireLaser(
 
     @microscope.abc.SerialDeviceMixin.lock_comms
     def set_power_mw(self, mW):
+        if mW > self._max_power_mw:
+            _logger.warning(
+                 "Sapphire: Requested power %.1f mW exceeds maximum %.1f mW; setting to maximum.",
+                mW, self._max_power_mw,
+            )
+            mW = self._max_power_mw
+        if mW < self._min_power:
+            _logger.warning(
+                "Sapphire: Requested power %.1f mW is below minimum %.1f mW; setting to minimum.",
+                mW, self._min_power,
+            )
+            mW = self._min_power
         mW_str = "%.3f" % mW
-        _logger.info("Setting laser power to %s mW.", mW_str)
+        response = self._write(b"p=%s" % mW_str.encode())
+        _logger.info("Sapphire: Power set to %s mW.", mW_str)
         # using send instead of _write, because
         # if laser is not on, warning is returned
-        return self._write(b"p=%s" % mW_str.encode())
+        return mW
 
     def _do_set_power(self, power: float) -> None:
         # power is already clipped to the [0 1] range but we need to
         # clip it again since the min power we actually can do is 0.2
         # and we get an error from the laser if we set it to lower.
-        power = max(self._min_power, power)
+        power = max(self._min_power/ self._max_power_mw, power)
         self.set_power_mw(power * self._max_power_mw)
 
     def _do_get_power(self) -> float:

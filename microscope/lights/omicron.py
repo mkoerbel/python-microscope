@@ -96,8 +96,8 @@ class OmicronLaser(
         self.write(command)
         response = self.read()
         if response == 'UK':
-            _logger.warning("Laser responded with 'Unknown command' to command '%s'", command)
-        response = response[len(command)+1:]
+            _logger.warning("Omicron: Laser responded with 'Unknown command' to command '%s'", command)
+        response = response[4:]
         return response
 
     def ask_firmware(self) -> tuple:
@@ -118,10 +118,10 @@ class OmicronLaser(
             if binary_status[i] == '1':
                 _logger.info("  %s", self.laser_status.get(i, "Undefined Status"))
         if binary_status[0] == '1':
-            _logger.error("Error state on laser!")
+            _logger.error("Omicron: Error state on laser!")
             # TODO: do follow up investigation
             failure_byte = self.ask("GFB")
-            _logger.error("Failure byte: %s", failure_byte)
+            _logger.error("Omicron: Failure byte: %s", failure_byte)
         return binary_status
 
     def ask_specs(self) -> tuple:
@@ -143,35 +143,35 @@ class OmicronLaser(
         # Calculate the corresponding HEX code and transmit it
         if power > self.max_power_mW:
             _logger.warning(
-                "Requested power %.1f mW exceeds maximum %.1f mW; setting to maximum.",
+                "Omicron: Requested power %.1f mW exceeds maximum %.1f mW; setting to maximum.",
                 power, self.max_power_mW,
             )
-            self.write("SLPFFF")
-        else:
-            code = hex(int(4095*power/self.max_power_mW))[2:].upper().zfill(3)
-            response = self.ask("SLP%s" % code)
-            if response == '>':
-                _logger.info("Power set to %.1f mW.", power)
-            elif response == 'x':
-                _logger.error("Failed to set power. Check if the laser is ON.")
-        #self.status = self.ask_actual_status()
+            power = self.max_power_mW
+
+        code = hex(int(4095*power/self.max_power_mW))[2:].upper().zfill(3)
+        response = self.ask("SLP%s" % code)
+        if response == '>':
+            _logger.info("Omicron: Power set to %.1f mW.", power)
+        elif response == 'x':
+            _logger.error("Omicron: Failed to set power. Check if the laser is ON.")
+        return power
 
     def laser_on(self) -> None:
         """Turn the laser ON. Return True if we succeeded, False otherwise."""
         response = self.ask("LOn")
         if response == '>':
-            _logger.info("Laser turned ON.")
+            _logger.info("Omicron: Laser turned ON.")
         elif response == 'x':
-            _logger.error("Failed to turn ON. Check if the laser is ready.")
+            _logger.error("Omicron: Failed to turn ON. Check if the laser is ready.")
         #self.status = self.ask_actual_status()
 
     def laser_off(self) -> None:
         """Turn the laser OFF."""
         response = self.ask("LOf")
         if response == '>':
-            _logger.info("Laser turned OFF.")
+            _logger.info("Omicron: Laser turned OFF.")
         elif response == 'x':
-            _logger.error("Failed to turn OFF. Check if the laser is ready.")
+            _logger.error("Omicron: Failed to turn OFF. Check if the laser is ready.")
         #self.status = self.ask_actual_status()
 
     def get_laser_status(self) -> bool:

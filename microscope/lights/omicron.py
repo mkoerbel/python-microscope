@@ -60,14 +60,7 @@ class OmicronLaser(
         # no parity. no handshake
         # timeout shoudl be over 0.1 s, 0.5 s is safe
         super().__init__(**kwargs)
-        self.connection = serial.Serial(
-            port=com,
-            baudrate=baud,
-            timeout=timeout,
-            stopbits=serial.STOPBITS_ONE,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_NONE,
-        )
+        self.connection = self._connect(com, baud, timeout)
         time.sleep(1)
         self.connection.reset_input_buffer()
 
@@ -78,6 +71,45 @@ class OmicronLaser(
         self.operating_mode = self.ask("GOM")
         self.status = self.ask_actual_status()
         self.wavelength, self.spec_power = self.ask_specs()
+
+    @staticmethod
+    def _connect(com: str, baud: int, timeout: float,
+                 max_attempts: int = 5, retry_delay: float = 2.0) -> serial.Serial:
+        """Open *com* with up to *max_attempts* retries.
+
+        Before each retry, the port is briefly opened and closed again to
+        release any OS-level lock left by a previous connection.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                conn = serial.Serial(
+                    port=com,
+                    baudrate=baud,
+                    timeout=timeout,
+                    stopbits=serial.STOPBITS_ONE,
+                    bytesize=serial.EIGHTBITS,
+                    parity=serial.PARITY_NONE,
+                )
+                _logger.info("Omicron: connected on %s (attempt %d/%d).", com, attempt, max_attempts)
+                return conn
+            except serial.SerialException as exc:
+                last_exc = exc
+                _logger.warning(
+                    "Omicron: connection attempt %d/%d on %s failed: %s",
+                    attempt, max_attempts, com, exc,
+                )
+                # Try to release any lingering OS lock on the port before retrying
+                try:
+                    stale = serial.Serial(port=com)
+                    stale.close()
+                except Exception:
+                    pass
+                if attempt < max_attempts:
+                    time.sleep(retry_delay)
+        raise serial.SerialException(
+            f"Omicron: could not open {com} after {max_attempts} attempts."
+        ) from last_exc
 
     def write(self, command: str) -> None:
         self.connection.write(("?" + command + "\r").encode('ascii'))

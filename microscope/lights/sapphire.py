@@ -57,14 +57,17 @@ class SapphireLaser(
         # no parity or flow control
         # timeout is recomended to be over 0.5
         super().__init__(**kwargs)
-        self.connection = serial.Serial(
-            port=com,
-            baudrate=baud,
-            timeout=timeout,
-            stopbits=serial.STOPBITS_ONE,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_NONE,
-        )
+        self.connection = self._connect(com, baud, timeout)
+        time.sleep(1)
+
+        #self.connection = serial.Serial(
+        #    port=com,
+        #    baudrate=baud,
+        #    timeout=timeout,
+        #    stopbits=serial.STOPBITS_ONE,
+        #    bytesize=serial.EIGHTBITS,
+        #    parity=serial.PARITY_NONE,
+        #)
         # Turning off command prompt
         self._write(b">=0")
 
@@ -74,18 +77,87 @@ class SapphireLaser(
         
         # Head ID value is a float point value,
         # but only the integer part is significant
-        time.sleep(0.5)
-        self.connection.reset_input_buffer()
-        headID = int(float(self.send(b"?hid")))
-        _logger.info("Sapphire: serial number %s", headID)
-        time.sleep(0.5)
-        self.connection.reset_input_buffer()
-        self._max_power_mw = float(self.send(b"?maxlp"))
-        time.sleep(0.5)
-        self.connection.reset_input_buffer()
-        self._min_power = float(self.send(b"?minlp"))
+        itry = 0
+        self.head_ID = None
+        while itry < 5:
+            response = self.send(b"?hid")
+            if response:
+                self.headID = int(float(response))
+                break
+            time.sleep(0.5)
+            self.connection.reset_input_buffer()
+            itry += 1
+        _logger.info("Sapphire: serial number %s", self.headID)
+
+        # Get max laser power
+        itry = 0
+        self._max_power_mw = None
+        while itry < 5:
+            response = self.send(b"?maxlp")
+            if response:
+                self._max_power_mw = float(response)
+                break
+            time.sleep(0.5)
+            self.connection.reset_input_buffer()
+            itry += 1
+
+        # Get min laser power
+        itry = 0
+        self._min_power = None
+        while itry < 5:
+            response = self.send(b"?minlp")
+            if response:
+                self._min_power = float(response)
+                break
+            time.sleep(0.5)
+            self.connection.reset_input_buffer()
+            itry += 1
 
         self.initialize()
+    
+    @staticmethod
+    def _connect(com: str, baud: int, timeout: float,
+                 max_attempts: int = 5, retry_delay: float = 2.0) -> serial.Serial:
+        """Open *com* with up to *max_attempts* retries.
+
+        Before each retry, the port is briefly opened and closed again to
+        release any OS-level lock left by a previous connection.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                conn = serial.Serial(
+                    port=com,
+                    baudrate=baud,
+                    timeout=timeout,
+                    stopbits=serial.STOPBITS_ONE,
+                    bytesize=serial.EIGHTBITS,
+                    parity=serial.PARITY_NONE,
+                )
+                _logger.info("Sapphire: connected on %s (attempt %d/%d).", com, attempt, max_attempts)
+                return conn
+            except serial.SerialException as exc:
+                last_exc = exc
+                _logger.warning(
+                    "Sapphire: connection attempt %d/%d on %s failed: %s",
+                    attempt, max_attempts, com, exc,
+                )
+                # Try to release any lingering OS lock on the port before retrying
+                try:
+                    stale = serial.Serial(port=com)
+                    stale.close()
+                except Exception:
+                    pass
+                if attempt < max_attempts:
+                    time.sleep(retry_delay)
+        raise serial.SerialException(
+            f"Sapphire: could not open {com} after {max_attempts} attempts."
+        ) from last_exc
+
+    #  Initialization to do when cockpit connects.
+    @microscope.abc.SerialDeviceMixin.lock_comms
+    def initialize(self):
+        self.flush_buffer()
 
     def _write(self, command):
         count = super()._write(command)
@@ -161,11 +233,6 @@ class SapphireLaser(
     def _do_shutdown(self) -> None:
         # Disable laser.
         self._write(b"l=0")
-        self.flush_buffer()
-
-    #  Initialization to do when cockpit connects.
-    @microscope.abc.SerialDeviceMixin.lock_comms
-    def initialize(self):
         self.flush_buffer()
 
     # Turn the laser ON. Return True if we succeeded, False otherwise.

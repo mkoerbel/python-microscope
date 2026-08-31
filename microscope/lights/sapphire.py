@@ -52,13 +52,13 @@ class SapphireLaser(
         b"6": "Error",
     }
 
-    def __init__(self, com=None, baud=19200, timeout=0.5, **kwargs):
+    def __init__(self, com=None, baud=19200, timeout=1, **kwargs):
         # laser controller must run at 19200 baud, 8+1 bits,
         # no parity or flow control
         # timeout is recomended to be over 0.5
         super().__init__(**kwargs)
         self.connection = self._connect(com, baud, timeout)
-        time.sleep(1)
+        #time.sleep(1)
 
         #self.connection = serial.Serial(
         #    port=com,
@@ -161,11 +161,15 @@ class SapphireLaser(
 
     def _write(self, command):
         count = super()._write(command)
-        # This device always writes backs something.  If echo is on,
-        # it's the whole command, otherwise just an empty line.  Read
-        # it and throw it away.
-        time.sleep(0.5)  # give the device a moment to respond
-        self._readline()
+        # This device may echo the command or return an empty line. Instead of
+        # forcing a fixed 0.5 s sleep before every read, wait briefly for the
+        # serial timeout to deliver data when available and read any pending
+        # echo/response once.
+        for _ in range(5):
+            response = self._readline()
+            if response:
+                break
+            time.sleep(0.05)
         return count
 
     def _readline(self) -> bytes:

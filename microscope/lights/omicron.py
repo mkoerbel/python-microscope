@@ -113,10 +113,21 @@ class OmicronLaser(
 
     def write(self, command: str) -> None:
         self.connection.write(("?" + command + "\r").encode('ascii'))
-        time.sleep(0.5)
+        # Give the device a moment to respond
+        #time.sleep(0.5)
 
     def read(self) -> str:
-        response = self.connection.read_all().decode('latin-1').strip()
+        #response = self.connection.read_all().decode('latin-1').strip()
+        response = b""
+        for _ in range(10):
+            chunk = self.connection.readline()
+            if chunk:
+                response += chunk
+                if b"\r" in chunk or b"\n" in chunk:
+                    break
+            else:
+                time.sleep(0.05)
+        response = response.decode('latin-1').strip()
         if "!UK" in response:
             return 'UK'
         else:
